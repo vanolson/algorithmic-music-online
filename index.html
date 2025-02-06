@@ -5,6 +5,7 @@
 <script src="https://algorithmicmusic.online/js/create-spectrum.js"></script>
 <script src="https://algorithmicmusic.online/js/create-waveform.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/resemblejs@5.0.0/resemble.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/midimessage@1.0.5/dist/index.js"></script>
 <style>
   body {
     font-family:"helvetica"
@@ -22,6 +23,29 @@
 /* global Tone, nn, d3, createWaveform, createSpectrum, resemble */
 
 const synth = new Tone.PolySynth().toDestination()
+
+// Ripped from netnet code. Needed more data
+function myMIDI (func) {
+  if (typeof func !== 'function') {
+    console.error('nn.MIDI: requires a callback function, this will run everytime you interact with your MIDI device.')
+  }
+
+  function onMIDISuccess (midiAccess) {
+    const inputs = midiAccess.inputs.values()
+    // midi info from https://github.com/notthetup/midimessage/blob/gh-pages/dist/index.js
+    for (const input of inputs) {
+      console.log(`nn.MIDI: ${input.name} connected!`)
+      input.onmidimessage = (message) => func({
+      dev: input.name, chl: message.data[1], val: message.data[2],   
+        messageCode: message.data[0] & 0xf0,
+      })
+    }
+  }
+
+  navigator.requestMIDIAccess()
+    .then(onMIDISuccess)
+    .catch(err => console.error(`nn.MIDI: ${err}`))
+}
 
 function intDiv (a, b) {
   return ~~(a/b)
@@ -88,13 +112,13 @@ function displayImage(file) {
 
 const notes = ['C', 'C#', 'D', 'D#', 'E', "F", "F#", "G", "G#", "A", "A#", "B"]
 const numNotes = 12
-const startOctave = 3
+const keyboardStartOctave = 3
 const keyboardKeys = ['a', 'w', 's', 'e', 'd', 'f', 't', 'g', 'y', 'h', 'u', 'j', 'k', 'o', 'l', 'p', ';', '\'']
 let keyboardMap = {};
   
 keyboardKeys.forEach(function (key, index) {
   // Note to self: using integer division
-  keyboardMap[key] = {note: `${notes[index % numNotes]}${startOctave + intDiv(index, numNotes)}`}
+  keyboardMap[key] = {note: `${notes[index % numNotes]}${keyboardStartOctave + intDiv(index, numNotes)}`}
 });
 
 function keyboardAttack (e) {
@@ -117,9 +141,78 @@ function keyboardRelease (e) {
   }
 }
 
-// events listeners
+const midiStartOctave = 0
+const midiKeys = [...Array(128).keys()]
+let midiMap = {};
+  
+midiKeys.forEach(function (key, index) {
+  // Note to self: using integer division
+  midiMap[key] = {note: `${notes[index % numNotes]}${midiStartOctave + intDiv(index, numNotes)}`}
+});
+  
+function midiAttack (key) {
+  // select the object from the keyMap matching the key pressed
+  const obj = midiMap[key]
+  // if we found an object and it is "not" pressed...
+  if (obj && !obj.pressed) {
+    //...then trigger the frequency
+    synth.triggerAttack(obj.note)
+    obj.pressed = true
+  }
+}
+  
+function midiRelease (key) {
+	  const obj = midiMap[key]
+  if (obj && obj.pressed) {
+    synth.triggerRelease(obj.note)
+    obj.pressed = false
+  }
+}
+  
+function adjustLevels (ch, val) {
+  
+}
+  
+function handleMidi (m) {
+  // console.log(m)
+  // Tried to import this but couldn't. pulling directly: https://github.com/notthetup/midimessage/blob/gh-pages/dist/index.js
+  console.log(m.messageCode)
+  switch (m.messageCode) {
+
+  // Note On
+  case 0x90:
+    console.log("note on");
+    const key = event.data[1] & 0x7F;
+    const velocity = event.data[2] & 0x7F;
+    if (velocity === 0) {
+      midiRelease (key)
+    }
+    else {
+      midiAttack (key)
+    }
+    break;
+
+
+  // Control Change
+  case 0xB0:
+    console.log('control change')
+    const controllerNumber = event.data[1] & 0x7F;
+    const controllerValue = event.data[2] & 0x7F;
+    adjustLevels(ch, val)
+    break;
+  }
+  // if (m.val === 0) {
+  //   midiRelease (m)
+  // }
+  // else {
+  //   midiAttack (m)
+  // }
+}
+
+// event listeners
 nn.on('keydown', keyboardAttack)
 nn.on('keyup', keyboardRelease)
+myMIDI(handleMidi)
   
 nn.create('h1')
   .content('VO-0')
