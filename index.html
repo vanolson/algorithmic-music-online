@@ -1,0 +1,149 @@
+<body></body>
+<script src="https://unpkg.com/tone"></script>
+<script src="https://cdn.jsdelivr.net/gh/netizenorg/netnet-standard-library/build/nn.min.js?v=1"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://algorithmicmusic.online/js/create-spectrum.js"></script>
+<script src="https://algorithmicmusic.online/js/create-waveform.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/resemblejs@5.0.0/resemble.js"></script>
+<script>
+/* global Tone, nn, d3, createWaveform, createSpectrum, resemble */
+const wave = createWaveform()
+const synth = new Tone.PolySynth().toDestination()
+synth.connect(wave)
+
+
+function newSettings (props) {
+  const reset = Tone.Synth.getDefaults()
+  synth.set(reset)
+  // Currently using preset from class, will adjust later
+  const settings = {
+    oscillator: {
+      type: 'fatsine4',
+      spread: props.red,
+      count: 10
+    },
+    envelope: {
+      attack: 0.4,
+      decay: 0.01,
+      sustain: 1,
+      attackCurve: 'sine',
+      releaseCurve: 'sine',
+      release: 0.4
+    }
+  }
+  synth.set(settings)
+  
+  document.getElementById("red").innerHTML = `Red: ${props.red}`
+  document.getElementById("green").innerHTML = `Green: ${props.green}`
+  document.getElementById("blue").innerHTML = `Blue: ${props.blue}`
+  document.getElementById("brightness").innerHTML = `Brightness: ${props.brightness}`
+  document.getElementById("white").innerHTML = `White: ${props.white}`
+  document.getElementById("black").innerHTML = `Black: ${props.black}`
+}
+  
+function displayImage(file) {
+  document.getElementById("theImage").src = file.data
+  
+  resemble(file.data).onComplete(function(props){
+    /* {
+      "red": 49,
+      "green": 5,
+      "blue": 3,
+      "alpha": 0,
+      "brightness": 18,
+      "white": 0,
+      "black": 3
+    } */
+    newSettings(props)
+  });
+}
+
+// we can create HTML elements with "nn"
+nn.create('button')// what we want to make
+  .set({ id: 'upload-btn' })
+  .content('Upload Image') // what we want it to say
+  .addTo('body')       // where we want to put it
+
+const fu = new nn.FileUploader({
+  maxSize: 1000,
+  types: ['image/jpeg', 'image/png'],
+  click: '#upload-btn',
+  ready: (file) => {
+    console.log(`the data for the ${file.type} file called ${file.name} is ready`)
+    console.log(file.data)
+    displayImage(file)
+  },
+  error: (err) => {
+    console.error(err)
+  }
+})
+
+// Using keys to control
+
+// here we've created a map or dictionary which assigns an object { freq, pressed } to a series of letters representing keys on our key board
+const notes = ['C', 'C#', 'D', 'D#', 'E', "F", "F#", "G", "G#", "A", "A#", "B"]
+const numNotes = 12
+const startOctave = 3
+const keyboardKeys = ['a', 'w', 's', 'e', 'd', 'f', 't', 'g', 'y', 'h', 'u', 'j', 'k', 'o', 'l', 'p', ';', '\'']
+let keyboardMap = {};
+  
+keyboardKeys.forEach(function (key, index) {
+  // Note to self: using integer division
+  keyboardMap[key] = {note: `${notes[index % numNotes]}${startOctave + ~~(index / numNotes)}`}
+});
+
+function keyboardAttack (e) {
+  // select the object from the keyMap matching the key pressed
+  const obj = keyboardMap[e.key]
+  // if we found an object and it is "not" pressed...
+  if (obj && !obj.pressed) {
+    //...then trigger the frequency
+    synth.triggerAttack(obj.note)
+    obj.pressed = true
+  }
+}
+
+// here we do the inverse of the function above
+function keyboardRelease (e) {
+	  const obj = keyboardMap[e.key]
+  if (obj && obj.pressed) {
+    synth.triggerRelease(obj.note)
+    obj.pressed = false
+  }
+}
+
+// events listeners
+nn.on('keydown', keyboardAttack)
+nn.on('keyup', keyboardRelease)
+  
+nn.create('div')
+  .content(`Red: 0`)
+  .set({ id:'red' })
+  .addTo('body')
+nn.create('div')
+  .content(`Green: 0`)
+  .set({ id:'green' })
+  .addTo('body')
+nn.create('div')
+  .content(`Blue: 0`)
+  .set({ id:'blue' })
+  .addTo('body')
+nn.create('div')
+  .content(`Brightness: 0`)
+  .set({ id:'brightness' })
+  .addTo('body')
+nn.create('div')
+  .content(`White: 0`)
+  .set({ id:'white' })
+  .addTo('body')
+nn.create('div')
+  .content(`Black: 0`)
+  .set({ id:'black' })
+  .addTo('body')
+  
+nn.create('img')
+    .set({ src: 'https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fc4.wallpaperflare.com%2Fwallpaper%2F23%2F13%2F163%2Fa-beautiful-village-in-a-natural-forest-wallpaper-preview.jpg&f=1&nofb=1&ipt=4986ba5755d36278c8b3f55db154a3789520ca8dc6e2f963245f8f46c5d0dfdc&ipo=images', id:'theImage'})
+    .addTo('body')
+
+
+</script>
