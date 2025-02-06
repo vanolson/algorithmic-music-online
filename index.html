@@ -5,25 +5,53 @@
 <script src="https://algorithmicmusic.online/js/create-spectrum.js"></script>
 <script src="https://algorithmicmusic.online/js/create-waveform.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/resemblejs@5.0.0/resemble.js"></script>
+<style>
+  body {
+    font-family:"helvetica"
+  }
+  label {
+    display: block;
+    margin: 0.2rem;
+  }
+  input[type=range] {
+    margin: 0.2rem;
+  }
+
+</style>
 <script>
 /* global Tone, nn, d3, createWaveform, createSpectrum, resemble */
-const wave = createWaveform()
+
 const synth = new Tone.PolySynth().toDestination()
-synth.connect(wave)
+
+function intDiv (a, b) {
+  return ~~(a/b)
+}
+  
+const sliders = ['red', 'green', 'blue', 'brightness', 'white', 'black']
 
 
 function newSettings (props) {
   const reset = Tone.Synth.getDefaults()
   synth.set(reset)
+  const oscOptions = ['sine', 'square', 'triangle', 'sawtooth', 'pwm', 'pulse']
+  const oscPrefix = ['', 'fm', 'am', 'fat']
+  const oscType = intDiv(props.red + props.green + props.blue + props.brightness + props.white + props.black, 100)
+  const oscPrefixType = oscType < 4 ? intDiv(props.brightness, 25) : 0
+  const osc = `${oscPrefix[oscPrefixType]}${oscOptions[oscType]}`
   // Currently using preset from class, will adjust later
   const settings = {
+    detune: (props.blue / 100) * 70,
     oscillator: {
-      type: 'fatsine4',
+      type: osc,
       spread: props.red,
-      count: 10
+      partial: [],
+      harmonicity: 0.5,
+      modulationType: 'sine',
+      count: 10,
+      width: 1,
     },
     envelope: {
-      attack: 0.4,
+      attack: props.green / 255 * 1,
       decay: 0.01,
       sustain: 1,
       attackCurve: 'sine',
@@ -33,12 +61,10 @@ function newSettings (props) {
   }
   synth.set(settings)
   
-  document.getElementById("red").innerHTML = `Red: ${props.red}`
-  document.getElementById("green").innerHTML = `Green: ${props.green}`
-  document.getElementById("blue").innerHTML = `Blue: ${props.blue}`
-  document.getElementById("brightness").innerHTML = `Brightness: ${props.brightness}`
-  document.getElementById("white").innerHTML = `White: ${props.white}`
-  document.getElementById("black").innerHTML = `Black: ${props.black}`
+  sliders.forEach((s) => {
+    console.log(s)
+    document.getElementById(`${s}-input`).value = props[s]
+  })
 }
   
 function displayImage(file) {
@@ -58,29 +84,8 @@ function displayImage(file) {
   });
 }
 
-// we can create HTML elements with "nn"
-nn.create('button')// what we want to make
-  .set({ id: 'upload-btn' })
-  .content('Upload Image') // what we want it to say
-  .addTo('body')       // where we want to put it
-
-const fu = new nn.FileUploader({
-  maxSize: 1000,
-  types: ['image/jpeg', 'image/png'],
-  click: '#upload-btn',
-  ready: (file) => {
-    console.log(`the data for the ${file.type} file called ${file.name} is ready`)
-    console.log(file.data)
-    displayImage(file)
-  },
-  error: (err) => {
-    console.error(err)
-  }
-})
-
 // Using keys to control
 
-// here we've created a map or dictionary which assigns an object { freq, pressed } to a series of letters representing keys on our key board
 const notes = ['C', 'C#', 'D', 'D#', 'E', "F", "F#", "G", "G#", "A", "A#", "B"]
 const numNotes = 12
 const startOctave = 3
@@ -89,7 +94,7 @@ let keyboardMap = {};
   
 keyboardKeys.forEach(function (key, index) {
   // Note to self: using integer division
-  keyboardMap[key] = {note: `${notes[index % numNotes]}${startOctave + ~~(index / numNotes)}`}
+  keyboardMap[key] = {note: `${notes[index % numNotes]}${startOctave + intDiv(index, numNotes)}`}
 });
 
 function keyboardAttack (e) {
@@ -116,30 +121,47 @@ function keyboardRelease (e) {
 nn.on('keydown', keyboardAttack)
 nn.on('keyup', keyboardRelease)
   
-nn.create('div')
-  .content(`Red: 0`)
-  .set({ id:'red' })
-  .addTo('body')
-nn.create('div')
-  .content(`Green: 0`)
-  .set({ id:'green' })
-  .addTo('body')
-nn.create('div')
-  .content(`Blue: 0`)
-  .set({ id:'blue' })
-  .addTo('body')
-nn.create('div')
-  .content(`Brightness: 0`)
-  .set({ id:'brightness' })
-  .addTo('body')
-nn.create('div')
-  .content(`White: 0`)
-  .set({ id:'white' })
-  .addTo('body')
-nn.create('div')
-  .content(`Black: 0`)
-  .set({ id:'black' })
-  .addTo('body')
+nn.create('h1')
+  .content('VO-0')
+  .css( { "text-align":"center" } )
+  .addTo('body')  
+  
+// we can create HTML elements with "nn"
+nn.create('button')// what we want to make
+  .set({ id: 'upload-btn' })
+  .content('Upload Image') // what we want it to say
+  .addTo('body')       // where we want to put it
+
+const fu = new nn.FileUploader({
+  maxSize: 10000,
+  types: ['image/jpeg', 'image/png'],
+  click: '#upload-btn',
+  ready: (file) => {
+    console.log(`the data for the ${file.type} file called ${file.name} is ready`)
+    console.log(file.data)
+    displayImage(file)
+  },
+  error: (err) => {
+    console.error(err)
+  }
+})
+
+function slider(name) {
+  nn.create('div')
+    .set({ id:name })
+    .addTo('body')
+  const inputName = `${name}-input`
+  nn.create('label')
+    .set({ 'for':inputName })
+    .content(name.toUpperCase())
+    .addTo(`#${name}`)
+  nn.create('input')
+    .set({ type:'range', id:inputName, min:0, max:100, readonly:"readonly"})
+    .content(`${name.toUpperCase()}`)
+    .addTo(`#${name}`)
+}
+  
+sliders.forEach((s) => slider(s))
   
 nn.create('img')
     .set({ src: 'https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fc4.wallpaperflare.com%2Fwallpaper%2F23%2F13%2F163%2Fa-beautiful-village-in-a-natural-forest-wallpaper-preview.jpg&f=1&nofb=1&ipt=4986ba5755d36278c8b3f55db154a3789520ca8dc6e2f963245f8f46c5d0dfdc&ipo=images', id:'theImage'})
