@@ -17,12 +17,41 @@
   input[type=range] {
     margin: 0.2rem;
   }
+  /* https://stackoverflow.com/questions/5803023/how-to-place-two-divs-next-to-each-other */
+  #wrapper {
+    width: 700px;
+    max-height: 600px;
+    border: 4px solid black;
+    overflow: hidden;
+    position: absolute;
+/*     top: 50%;
+    left: 50%;
+    margin: -200px 0 0 -500px; */
+/*     display: table;
+    margin-right: auto;
+    margin-left: auto; */
+  }
+  #first {
+      width: 200px;
+      float:left; /* add this */
+/*       border: 1px solid red; */
+  }
+  #second {
+/*       border: 1px solid green; */
+      overflow: hidden; /* if you don't want #second to wrap below #first */
+  }
 
 </style>
 <script>
 /* global Tone, nn, d3, createWaveform, createSpectrum, resemble */
 
-const synth = new Tone.PolySynth().toDestination()
+const synth = new Tone.PolySynth()
+const distortion = new Tone.Distortion().set({ distortion:0.5, wet:0})
+const reverb = new Tone.Reverb().set({ wet:1 })
+
+synth.connect(reverb)
+reverb.connect(distortion)
+distortion.toDestination()
 
 // Ripped from netnet code. Needed more data
 function myMIDI (func) {
@@ -53,48 +82,77 @@ function intDiv (a, b) {
   
 const sliders = ['red', 'green', 'blue', 'brightness', 'white', 'black']
 
+function adjustSliderLabels() {
+  sliders.forEach((s) => {
+    const val = document.getElementById(`${s}-input`).value
+    document.getElementById(`${s}-label`).innerHTML = `${s.toUpperCase()} . . . . . . ${val}`
+  })
+}
 
-function newSettings (props) {
-  const reset = Tone.Synth.getDefaults()
-  synth.set(reset)
-  const oscOptions = ['sine', 'square', 'triangle', 'sawtooth', 'pwm', 'pulse']
-  const oscPrefix = ['', 'fm', 'am', 'fat']
-  const oscType = intDiv(props.red + props.green + props.blue + props.brightness + props.white + props.black, 100)
-  const oscPrefixType = oscType < 4 ? intDiv(props.brightness, 25) : 0
-  const osc = `${oscPrefix[oscPrefixType]}${oscOptions[oscType]}`
-  // Currently using preset from class, will adjust later
-  const settings = {
-    detune: (props.blue / 100) * 70,
-    oscillator: {
-      type: osc,
-      spread: props.red,
-      partial: [],
-      harmonicity: 0.5,
-      modulationType: 'sine',
-      count: 10,
-      width: 1,
-    },
-    envelope: {
-      attack: props.green / 255 * 1,
-      decay: 0.01,
-      sustain: 1,
-      attackCurve: 'sine',
-      releaseCurve: 'sine',
-      release: 0.4
-    }
-  }
-  synth.set(settings)
-  
+function adjustSliders (props) {
   sliders.forEach((s) => {
     console.log(s)
     document.getElementById(`${s}-input`).value = props[s]
+    adjustSliderLabels()
   })
 }
   
-function displayImage(file) {
-  document.getElementById("theImage").src = file.data
+function getSliders() {
+  sl = {};
+  sliders.forEach((s) => {
+    sl[s] = parseInt(document.getElementById(`${s}-input`).value)
+  })
+  return sl
+}
+
+
+function newSettings () {
+  adjustSliderLabels()
+  s = getSliders()
+  const reset = Tone.Synth.getDefaults()
+  synth.set(reset)
   
-  resemble(file.data).onComplete(function(props){
+  const oscOptions = ['sine', 'square', 'triangle', 'sawtooth', 'pwm', 'pulse']
+  const oscPrefix = ['', 'fm', 'am', 'fat']
+  const oscType = intDiv(s.red + s.green + s.blue + s.brightness + s.white + s.black, 100)
+  const oscPrefixType = oscType < 4 ? intDiv(s.brightness, 25) : 0
+  const osc = `${oscPrefix[oscPrefixType]}${oscOptions[oscType]}`
+  
+  const settings = {
+    portamento: Math.abs(s.black - s.white) / 200,
+    detune: (s.blue / 100) * 70,
+    oscillator: {
+      type: osc,
+      spread: s.red,
+      partials: [],
+      harmonicity: 0.5,
+      modulationType: 'sine',
+      count: 10,
+      width: 1000,
+    },
+    envelope: {
+      attack: s.green / 200,
+      decay: s.blue / 100,
+      sustain: 1,
+      attackCurve: 'sine',
+      releaseCurve: 'sine',
+      release: s.red / 100 + 0.2
+    }
+  }
+  distortion.set({ wet:(s.black / 100) })
+  reverb.set({ wet:(s.white / 100) })
+  synth.set(settings)
+  
+}
+  
+function displayImage(file=0) {
+  const img = document.getElementById("theImage")
+  if (file !== 0) {
+    img.src = file.data
+  }
+  console.log(img)
+  
+  resemble(img.src).onComplete(function(props){
     /* {
       "red": 49,
       "green": 5,
@@ -104,7 +162,8 @@ function displayImage(file) {
       "white": 0,
       "black": 3
     } */
-    newSettings(props)
+    adjustSliders(props)
+    newSettings()
   });
 }
 
@@ -176,37 +235,29 @@ function adjustLevels (ch, val) {
 function handleMidi (m) {
   // console.log(m)
   // Tried to import this but couldn't. pulling directly: https://github.com/notthetup/midimessage/blob/gh-pages/dist/index.js
-  console.log(m.messageCode)
+  // console.log(m.messageCode)
   switch (m.messageCode) {
+    // Note On
+    case 0x90:
+      // console.log("note on");
+      const key = event.data[1] & 0x7F;
+      const velocity = event.data[2] & 0x7F;
+      if (velocity === 0) {
+        midiRelease (key)
+      }
+      else {
+        midiAttack (key)
+      }
+      break;
 
-  // Note On
-  case 0x90:
-    console.log("note on");
-    const key = event.data[1] & 0x7F;
-    const velocity = event.data[2] & 0x7F;
-    if (velocity === 0) {
-      midiRelease (key)
-    }
-    else {
-      midiAttack (key)
-    }
-    break;
-
-
-  // Control Change
-  case 0xB0:
-    console.log('control change')
-    const controllerNumber = event.data[1] & 0x7F;
-    const controllerValue = event.data[2] & 0x7F;
-    adjustLevels(ch, val)
-    break;
+    // Control Change
+    case 0xB0:
+      // console.log('control change')
+      const controllerNumber = event.data[1] & 0x7F;
+      const controllerValue = event.data[2] & 0x7F;
+      adjustLevels(ch, val)
+      break;
   }
-  // if (m.val === 0) {
-  //   midiRelease (m)
-  // }
-  // else {
-  //   midiAttack (m)
-  // }
 }
 
 // event listeners
@@ -215,15 +266,27 @@ nn.on('keyup', keyboardRelease)
 myMIDI(handleMidi)
   
 nn.create('h1')
-  .content('VO-0')
+  .content('PNG-0')
   .css( { "text-align":"center" } )
-  .addTo('body')  
+  .addTo('body') 
+  
+nn.create('div')
+  .set( { id: 'wrapper'})
+  .addTo('body')
+  
+nn.create('div')
+  .set( { id: 'first'})
+  .addTo('#wrapper')
+  
+nn.create('div')
+  .set( { id: 'second'})
+  .addTo('#wrapper')
   
 // we can create HTML elements with "nn"
 nn.create('button')// what we want to make
   .set({ id: 'upload-btn' })
   .content('Upload Image') // what we want it to say
-  .addTo('body')       // where we want to put it
+  .addTo('#second')       // where we want to put it
 
 const fu = new nn.FileUploader({
   maxSize: 10000,
@@ -242,23 +305,23 @@ const fu = new nn.FileUploader({
 function slider(name) {
   nn.create('div')
     .set({ id:name })
-    .addTo('body')
+    .addTo('#first')
   const inputName = `${name}-input`
   nn.create('label')
-    .set({ 'for':inputName })
-    .content(name.toUpperCase())
+    .set({ 'for':inputName, id:`${name}-label` })
+    .content(`${name.toUpperCase()} . . . . . . 0`)
     .addTo(`#${name}`)
   nn.create('input')
-    .set({ type:'range', id:inputName, min:0, max:100, readonly:"readonly"})
-    .content(`${name.toUpperCase()}`)
+    .set({ type:'range', id:inputName, min:0, max:100, value:0, readonly:"readonly", onchange:"newSettings()"})
     .addTo(`#${name}`)
 }
   
 sliders.forEach((s) => slider(s))
   
 nn.create('img')
-    .set({ src: 'https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fc4.wallpaperflare.com%2Fwallpaper%2F23%2F13%2F163%2Fa-beautiful-village-in-a-natural-forest-wallpaper-preview.jpg&f=1&nofb=1&ipt=4986ba5755d36278c8b3f55db154a3789520ca8dc6e2f963245f8f46c5d0dfdc&ipo=images', id:'theImage'})
-    .addTo('body')
+    .set({ id:'theImage'})
+    .addTo('#second')
+newSettings()
 
 
 </script>
